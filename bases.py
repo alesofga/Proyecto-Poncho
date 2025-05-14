@@ -1,4 +1,3 @@
-
 import sqlite3
 from faker import Faker
 import random
@@ -24,7 +23,8 @@ CREATE_TABLES = [
          idbitacora INTEGER PRIMARY KEY,
          timestamp TEXT,
          fechallamada TEXT,
-         obs TEXT
+         obs TEXT,
+         recording_pdf TEXT
      )'''),
     ("Agenda",
      '''
@@ -154,6 +154,30 @@ CREATE_TABLES = [
          ayuda_auditiva TEXT,
          PRIMARY KEY(id, nombre_candidato)
      )'''),
+     ("Donantes",
+     '''
+     CREATE TABLE IF NOT EXISTS Donantes (
+         id TEXT,
+         tipo_donante TEXT,
+         sector_donante TEXT,
+         nombre_donante TEXT,
+         telefono_donante TEXT,
+         correo_donante TEXT,
+         direccion_donante TEXT, 
+         redes_sociales TEXT,
+         observaciones_donante TEXT
+     )'''),
+     ("Reminders", """
+    CREATE TABLE IF NOT EXISTS Reminders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT,
+    tipo TEXT,
+    mensaje TEXT,
+    due_datetime TEXT,
+    seen INTEGER DEFAULT 0,
+    notified INTEGER DEFAULT 0
+)"""),
+
 ]
 
 def create_and_populate(n_users=20, n_records=10):
@@ -161,7 +185,6 @@ def create_and_populate(n_users=20, n_records=10):
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
 
-    # Crear tablas
     for _, ddl in CREATE_TABLES:
         c.execute(ddl)
     conn.commit()
@@ -181,10 +204,19 @@ def create_and_populate(n_users=20, n_records=10):
 
     for _ in range(n_records):
         idb = fake.random_int(1000, 9999)
-        ts = fake.date_time_between('-1y', 'now').strftime('%d-%m-%Y %H:%M')
-        fc = fake.date_time_between('-1y', 'now').strftime('%Y-%m-%d %H:%M')
+        ts  = fake.date_time_between('-1y', 'now').strftime('%d-%m-%Y %H:%M')
+        fc  = fake.date_time_between('-1y', 'now').strftime('%Y-%m-%d %H:%M')
         obs = fake.sentence(nb_words=6)
-        c.execute('INSERT OR IGNORE INTO Bitacora VALUES (?,?,?,?)', (idb, ts, fc, obs))
+        # grabamos recording_pdf como NULL
+        c.execute(
+            '''
+            INSERT OR IGNORE INTO Bitacora
+            (idbitacora, timestamp, fechallamada, obs, recording_pdf)
+            VALUES (?,?,?,?,?)
+            ''',
+            (idb, ts, fc, obs, None)
+        )
+
 
     sample_imgs = ['person1.jpg', 'person2.jpeg', 'person3.jpeg', 'person4.jpeg']
     for _ in range(n_records):
@@ -253,6 +285,24 @@ def create_and_populate(n_users=20, n_records=10):
             fake.bothify('P##??'), fake.name(), fake.bothify('EXP-#####'), random.choice(['Sí','No']),
             fake.company(), fake.state(), fake.city(), fake.name(), fake.name(), fake.name(), fake.company(), random.choice(['Sí','No'])
         ))
+
+    tipos_donante = ['Individual','Grupo','Empresa']
+    sectores_donante = ['Privado','Público','ONG']
+    for _ in range(n_records):
+        c.execute('INSERT OR IGNORE INTO Donantes VALUES (?,?,?,?,?,?,?,?,?)', (
+            fake.bothify('D##??'), random.choice(tipos_donante), random.choice(sectores_donante), fake.name(),
+            fake.phone_number(), fake.email(), fake.city(), fake.user_name(), fake.text()
+            ))
+
+    for _ in range(5):
+        user = random.choice([u[0] for u in c.execute("SELECT id FROM Usuario").fetchall()])
+        tipo = random.choice(["seguimiento","cita","cumpleaños","invitación"])
+        msg  = f"Prueba de {tipo} para usuario {user}"
+        due  = date.today().isoformat() + "T09:00:00"
+        c.execute(
+            "INSERT INTO Reminders(user_id, tipo, mensaje, due_datetime) VALUES (?,?,?,?)",
+            (user, tipo, msg, due)
+        )
 
     conn.commit()
     conn.close()
